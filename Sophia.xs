@@ -5,11 +5,13 @@
 #include "XSUB.h"
 
 #include <stdarg.h>
-#include <sophia.h>
+#include "sophia.h"
 
 typedef struct
 {
 	void *ptr;
+	void *cmp;
+	void *arg;
 }
 sophia_env_t;
 
@@ -132,6 +134,15 @@ begin(env)
 	OUTPUT:
 		RETVAL
 
+void
+DESTROY(ptr)
+	Database::Sophia ptr;
+	
+	CODE:
+		if(ptr)
+			free(ptr);
+
+
 MODULE = Database::Sophia  PACKAGE = Database::Sophia::Ctl
 
 PROTOTYPES: DISABLE
@@ -172,17 +183,21 @@ get(ctl, key)
 			{
 				croak("Object of empty type returned from ctl sp_get");
 			}
-			elseif (!strcmp(t, "database"))
+			else if (!strcmp(t, "database"))
 			{
 				sophia_db_t *db = malloc(sizeof(sophia_db_t));
 				db->ptr = obj;
+				RETVAL = sv_newmortal();
 				sv_setref_pv(RETVAL, "Database::Sophia::DB", (void *)db);
+				SvREFCNT_inc(RETVAL);
 			}
 			else if (!strcmp(t, "snapshot"))
 			{
 				sophia_snapshot_t *snapshot = malloc(sizeof(sophia_snapshot_t));
 				snapshot->ptr = obj;
+				RETVAL = sv_newmortal();
 				sv_setref_pv(RETVAL, "Database::Sophia::Snapshot", (void *)snapshot);
+				SvREFCNT_inc(RETVAL);
 			}
 			else if (!strcmp(t, "object"))
 			{
@@ -210,8 +225,27 @@ cursor(ctl)
 	OUTPUT:
 		RETVAL
 
+void
+DESTROY(ptr)
+	Database::Sophia::Ctl ptr;
+	
+	CODE:
+		if(ptr)
+			free(ptr);
+
 
 MODULE = Database::Sophia  PACKAGE = Database::Sophia::DB
+
+Database::Sophia::Ctl
+ctl(db)
+	Database::Sophia::DB db;
+	
+	CODE:
+		sophia_ctl_t *ctl = malloc(sizeof(sophia_ctl_t));
+		ctl->ptr = sp_ctl(db->ptr);
+		RETVAL = ctl;
+	OUTPUT:
+		RETVAL
 
 SV*
 open(db)
@@ -313,10 +347,10 @@ cursor(db, key, order)
 		STRLEN len_k = 0;
 		char *key_c = SvPV(key, len_k);
 		STRLEN len_o = 0;
-		char *order_c = SvPV(order, len_v);
+		char *order_c = SvPV(order, len_o);
 		void *obj = sp_object(db->ptr);
 		
-		RETVAL = &PL_sv_undef;
+		RETVAL = (void*)&PL_sv_undef;
 		if (obj)
 		{
 			sp_set(obj, "key", key_c, len_k);
@@ -333,6 +367,16 @@ cursor(db, key, order)
 	OUTPUT:
 		RETVAL
 
+void
+DESTROY(ptr)
+	Database::Sophia::DB ptr;
+	
+	CODE:
+		if(ptr->ptr)
+			sp_destroy(ptr->ptr);
+		if(ptr)
+			free(ptr);
+
 
 MODULE = Database::Sophia  PACKAGE = Database::Sophia::Txn
 
@@ -344,24 +388,102 @@ commit(txn)
 	
 	CODE:
 		RETVAL = newSViv( sp_commit(txn->ptr) );
+		// FIXME destroy
 	OUTPUT:
 		RETVAL
 
 SV*
-get(txn, key)
+get(txn, db, key)
 	Database::Sophia::Txn txn;
+	Database::Sophia::DB db;
 	SV *key;
+	
+	CODE:
+		int err;
+		STRLEN len_k = 0;
+		char *key_c = SvPV(key, len_k);
+		void *value;
+		size_t size;
+		
+		RETVAL = &PL_sv_undef;
+		void *obj = sp_object(db->ptr);
+		void *ret;
+		if (obj)
+		{
+			sp_set(obj, "key", key_c, len_k);
+			ret = sp_get(txn->ptr, obj);
+			if (!err)
+			{
+				value = sp_get(ret, "value", &size);
+				RETVAL = newSVpv(value, size);
+				sp_destroy(ret);
+			}
+			sp_destroy(obj);
+		}
+	OUTPUT:
+		RETVAL
 
 SV*
-delete(txn, key)
+delete(txn, db, key)
 	Database::Sophia::Txn txn;
+	Database::Sophia::DB db;
 	SV *key;
+	
+	CODE:
+		int err;
+		STRLEN len_k = 0;
+		char *key_c = SvPV(key, len_k);
+		
+		RETVAL = &PL_sv_undef;
+		void *obj = sp_object(db->ptr);
+		void *ret;
+		if (obj)
+		{
+			sp_set(obj, "key", key_c, len_k);
+			err = sp_delete(txn->ptr, obj);
+			sp_destroy(obj);
+		}
+		RETVAL = newSViv(err);
+	OUTPUT:
+		RETVAL
 
 SV*
-set(txn, key, value)
+set(txn, db, key, value)
 	Database::Sophia::Txn txn;
+	Database::Sophia::DB db;
 	SV *key;
 	SV *value;
+	
+	CODE:
+		int err;
+		STRLEN len_k = 0;
+		char *key_c = SvPV(key, len_k);
+		STRLEN len_v = 0;
+		char *value_c = SvPV(value, len_v);
+		
+		RETVAL = &PL_sv_undef;
+		void *obj = sp_object(db->ptr);
+		void *ret;
+		if (obj)
+		{
+			sp_set(obj, "key", key_c, len_k);
+			sp_set(obj, "value", value_c, len_v);
+			err = sp_set(txn->ptr, obj);
+			sp_destroy(obj);
+		}
+		RETVAL = newSViv(err);
+	OUTPUT:
+		RETVAL
+
+void
+DESTROY(ptr)
+	Database::Sophia::Txn ptr;
+	
+	CODE:
+		if(ptr->ptr)
+			sp_destroy(ptr->ptr);
+		if(ptr)
+			free(ptr);
 
 
 MODULE = Database::Sophia  PACKAGE = Database::Sophia::Snapshot
@@ -379,15 +501,77 @@ drop(snapshot)
 		RETVAL
 
 SV*
-get(txn, key)
+get(snapshot, db, key)
 	Database::Sophia::Snapshot snapshot;
+	Database::Sophia::DB db;
 	SV *key;
+	
+	CODE:
+		int err;
+		STRLEN len_k = 0;
+		char *key_c = SvPV(key, len_k);
+		void *value;
+		size_t size;
+		
+		RETVAL = &PL_sv_undef;
+		void *obj = sp_object(db->ptr);
+		void *ret;
+		if (obj)
+		{
+			sp_set(obj, "key", key_c, len_k);
+			ret = sp_get(snapshot->ptr, obj);
+			if (!err)
+			{
+				value = sp_get(ret, "value", &size);
+				RETVAL = newSVpv(value, size);
+				sp_destroy(ret);
+			}
+			sp_destroy(obj);
+		}
+	OUTPUT:
+		RETVAL
 
 Database::Sophia::Cursor
-cursor(db, key, order)
+cursor(snapshot, db, key, order)
 	Database::Sophia::Snapshot snapshot;
+	Database::Sophia::DB db;
 	SV *key;
 	SV *order;
+	
+	CODE:
+		void *c;
+		STRLEN len_k = 0;
+		char *key_c = SvPV(key, len_k);
+		STRLEN len_o = 0;
+		char *order_c = SvPV(order, len_o);
+		void *obj = sp_object(db->ptr);
+		
+		RETVAL = (void*)&PL_sv_undef;
+		if (obj)
+		{
+			sp_set(obj, "key", key_c, len_k);
+			sp_set(obj, "order", order_c, len_o);
+			c = sp_cursor(snapshot->ptr, obj);
+			sp_destroy(obj);
+			if (c)
+			{
+				sophia_cursor_t *cur = malloc(sizeof(sophia_cursor_t));
+				cur->ptr = c;
+				RETVAL = cur;
+			}
+		}
+	OUTPUT:
+		RETVAL
+
+void
+DESTROY(ptr)
+	Database::Sophia::Snapshot ptr;
+	
+	CODE:
+		if(ptr->ptr)
+			sp_destroy(ptr->ptr);
+		if(ptr)
+			free(ptr);
 
 
 MODULE = Database::Sophia  PACKAGE = Database::Sophia::Cursor
@@ -395,9 +579,24 @@ MODULE = Database::Sophia  PACKAGE = Database::Sophia::Cursor
 PROTOTYPES: DISABLE
 
 SV*
-get(cursor, key)
+next_key(cursor)
 	Database::Sophia::Cursor cursor;
-	SV *key;
+	
+	CODE:
+		void *obj = sp_get(cursor->ptr);
+		uint32_t size;
+		char *value;
+		if (obj)
+		{
+			value = sp_get(obj, "key", &size);
+			RETVAL = newSVpv(value, size);
+		}
+		else
+		{
+			RETVAL = &PL_sv_undef;
+		}
+	OUTPUT:
+		RETVAL
 
 SV*
 cur_key(cursor)
@@ -441,10 +640,10 @@ cur_value(cursor)
 
 void
 DESTROY(ptr)
-	Database::Sophia ptr;
+	Database::Sophia::Snapshot ptr;
 	
 	CODE:
 		if(ptr->ptr)
-			sp_destroy(ptr);
+			sp_destroy(ptr->ptr);
 		if(ptr)
 			free(ptr);

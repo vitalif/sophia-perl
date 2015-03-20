@@ -7,9 +7,6 @@ use Archive::Extract;
 use FindBin;
 use ExtUtils::MakeMaker;
 
-my $sophia     = $FindBin::Bin ."/Sophia-src";
-my $sophia_src = "$sophia/db";
-
 my $rc = eval
 {
 	require 5.010;
@@ -30,8 +27,8 @@ if($rc && !-e "sophia-master")
 	};
 }
 
-$sophia     = $FindBin::Bin ."/sophia-master";
-$sophia_src = -e "$sophia/db" ? "$sophia/db" : $sophia;
+my $sophia     = $FindBin::Bin ."/sophia-master";
+my $sophia_src = -e "$sophia/db" ? "$sophia/db" : $sophia;
 
 `make -C $sophia_src libsophia.a`;
 
