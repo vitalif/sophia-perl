@@ -52,40 +52,33 @@ __END__
 
 =head1 NAME
 
-Database::Sophia - Sophia is a modern embeddable key-value database designed for a high load environment (XS for Sophia)
+Database::Sophia - XS for Sophia 1.2, a modern embeddable key-value database designed for a high load environment.
 
 =head1 SYNOPSIS
 
- 
  use Database::Sophia;
  
- my $env = Database::Sophia->sp_env();
+ my $env = Database::Sophia::env();
+ my $ctl = $env->ctl;
  
- my $err = $env->sp_ctl(SPDIR, SPO_CREAT|SPO_RDWR, "./db");
- die $env->sp_error() if $err == -1;
+ $ctl->set('sophia.path', './storage');
+ $ctl->set('db', 'test');
  
- my $db = $env->sp_open();
- die $env->sp_error() unless $db;
+ $env->open;
  
- $err = $db->sp_set("login", "lastmac");
- print $db->sp_error(), "\n" if $err == -1;
+ my $db = $ctl->get('db.test');
  
- my $value = $db->sp_get("login", $err);
- 
- if($err == -1) {
- 	print $db->sp_error(), "\n";
- }
- elsif($err == 0) {
- 	print "Key not found", "\n";
- }
- elsif($err == 1) {
- 	print "Key found", "\n";
- 	print "login: ", $value, "\n";
+ if ($db->set('login', 'lastmac') != 0) {
+     die $ctl->get('sophia.error');
  }
  
- $db->sp_destroy();
- $env->sp_destroy();
+ warn $db->get('login');
  
+ $db->delete('login');
+ 
+ my $transaction = $env->begin;
+ $transaction->set($db, 'login', 'otherguy');
+ $transaction->commit;
 
 =head1 DESCRIPTION
 
@@ -96,327 +89,122 @@ See http://sphia.org/
 
 =head1 METHODS
 
-=head2 sp_env
+=head2 Database::Sophia
 
-create a new environment handle
+=head3 $env = Database::Sophia::env()
 
- my $env = Database::Sophia->sp_env();
+return the environment handle
 
+=head3 $ctl = $env->ctl()
 
-=head2 sp_ctl
+get configuration object (Database::Sophia::Ctl)
 
-configurate a database
+=head3 $rc = $env->open()
 
-=head3 SPDIR
+opens the database
 
-Sets database directory path and it's open flags to use by sp_open().
+=head3 $txn = $env->begin()
 
- $env->sp_ctl(SPDIR, SPO_CREAT|SPO_RDWR, "./db");
+starts a new transaction and returns its object (Database::Sophia::Txn)
 
-=item Possible flags are:
+=head2 Database::Sophia::Ctl
 
-SPO_RDWR   - open repository in read-write mode (default)
+=head3 $rc = $ctl->set('key', 'value')
 
-SPO_RDONLY - open repository in read-only mode
+set a configuration parameter or call system procedure
 
-SPO_CREAT  - create repository if it is not exists.
+=head3 $value = $ctl->get('key')
 
-=back
+get the value of a configuration parameter, or database object by 'db.<NAME>' key,
+or snapshot object by 'snapshot.<NAME>' key
 
+=head3 $cursor = $ctl->cursor
 
-=head3 SPCMP
+get an iterator over all configuration values
 
-Sets database comparator function to use by database for a key order determination.
+=head2 Database::Sophia::DB
 
- my $sub_cmp = sub {
-	my ($key_a, $key_b, $arg) = @_;
- }
- 
- $env->sp_ctl(SPCMP, $sub_cmp, "arg to callback");
+=head3 $ctl = $db->ctl()
 
+get a configuration object for this database, equivalent to part of the global
+Ctl with prefix 'db.<name>'
 
-=head3 SPPAGE
+=head3 $value = $db->get('key')
 
-Sets database max key count in a single page. This option can be tweaked for performance.
+read a key as a single-statement transaction
 
- $env->sp_ctl(SPPAGE, 1024);
+=head3 $db->set('key', 'value')
 
+set a key as a single-statement transaction
 
-=head3 SPGC
+=head3 $db->delete('key')
 
-Sets flag that garbage collector should be turn on.
+delete a key as a single-statement transaction
 
- $env->sp_ctl(SPGC, 1);
+=head3 $cursor = $db->cursor($starting_key, $order)
 
+get an iterator over database keys, starting with $starting_key in the direction $order,
+which may be one of '<', '<=', '>=', '>'
 
-=head3 SPGCF
+=head2 Database::Sophia::Txn
 
-Sets database garbage collector factor value, which is used to determine whether it is time to start gc.
+=head3 $txn->get($db, 'key')
 
- $env->sp_ctl(SPGCF, 0.5);
+get a key from database $db as a part of transaction $txn.
 
+=head3 $txn->set($db, 'key', 'value')
 
-=head3 SPGROW
+set a key in database $db as a part of transaction $txn.
 
-Sets new database files initial new size and resize factor. This values are used while database extend during merge.
+=head3 $txn->delete($db, 'key')
 
- $env->sp_ctl(SPGROW, 16 * 1024 * 1024, 2.0);
+delete a key in database $db as a part of transaction $txn.
 
+=head3 $txn->commit
 
-=head3 SPMERGE
+apply a transaction; if you want to rollback it instead of commiting,
+just destroy all references to the $txn object
 
-Sets flag that merger thread must be created during sp_open().
+=head2 Database::Sophia::Snapshot
 
- $env->sp_ctl(SPMERGE, 1);
+=head3 $snapshot->get($db, 'key')
 
+get a key from the snapshot
 
-=head3 SPMERGEWM
+=head3 $snapshot->drop
 
-Sets database merge watermark value.
+delete (drop) the snapshot
 
- $env->sp_ctl(SPMERGEWM, 200000);
+=head3 $snapshot->cursor($db, $starting_key, $order)
 
+get an iterator over database keys in the snapshot, starting with $starting_key in the direction $order,
+which may be one of '<', '<=', '>=', '>'
 
-=head2 sp_open
+=head2 Database::Sophia::Cursor
 
-Open or create a database
+=head3 $key = $cursor->cur_key
 
- my $db = $env->sp_open();
+return the current key.
 
-On success, return database object; On error, it returns undef.
+=head3 $value = $cursor->cur_value
 
+return the current value.
 
-=head2 sp_error
+=head3 $next_key = $cursor->next_key
 
-Get a string error description
-
- $env->sp_error();
-
-
-=head2 sp_destroy
-
-Free any handle
-
- $ptr->sp_destroy();
-
-
-=head2 sp_begin
-
-Begin a transaction
-
- $db->sp_begin();
-
-
-=head2 sp_commit
-
-Apply a transaction
-
- $db->sp_commit();
-
-
-=head2 sp_rollback
-
-Discard a transaction changes
-
- $db->sp_rollback();
-
-
-=head2 sp_set
-
-Insert or replace a key-value pair
-
- $db->sp_set("key", "value");
-
-
-=head2 sp_get
-
-Find a key in a database
-
- my $error;
- $db->sp_get("key", $error);
-
-
-=head2 sp_delete
-
-Delete key from a database
-
- $db->sp_delete("key");
-
-
-=head2 sp_cursor
-
-create a database cursor
-
- my $cur = $db->sp_cursor(SPGT, "key");
-
-=item Possible order are:
-
-SPGT  - increasing order (skipping the key, if it is equal)
-
-SPGTE - increasing order (with key)
-
-SPLT  - decreasing order (skippng the key, if is is equal)
-
-SPLTE - decreasing order
-
-=back
-
-After a use, cursor handle should be freed by $cur->sp_destroy() function.
-
-
-=head2 sp_fetch
-
-Iterate a cursor
-
- $cur->sp_fetch();
-
-
-=head2 sp_key
-
-Get current key
-
- $cur->sp_key()
-
-
-=head2 sp_keysize
-
- $cur->sp_keysize()
-
-
-=head2 sp_value
-
- $cur->sp_value()
-
-
-=head2 sp_valuesize
-
- $cur->sp_valuesize()
-
-
-=head1 Example
-
-=head2 sp_open
-
- use Database::Sophia;
- 
- my $env = Database::Sophia->sp_env();
- 
- my $err = $env->sp_ctl(SPDIR, SPO_CREAT|SPO_RDWR, "./db");
- die $env->sp_error() if $err == -1;
- 
- my $db = $env->sp_open();
- die $env->sp_error() unless $db;
-
-=head2 sp_error
-
- my $db = $env->sp_open();
- die $env->sp_error() unless $db;
-
-
-=head2 sp_destroy
-
- $db->sp_destroy();
- $cur->sp_destroy();
- $env->sp_destroy();
-
-
-=head2 sp_begin
-
- my $rc = $db->sp_begin();
- print $env->sp_error(), "\n" if $rc == -1;
- 
- $rc = $db->sp_set("key", "value");
- print $env->sp_error(), "\n" if $rc == -1;
- 
- $rc = $db->sp_commit();
- print $env->sp_error(), "\n" if $rc == -1;
-
-
-=head2 sp_commit
-
-See sp_begin
-
-
-=head2 sp_rollback
-
- my $rc = $db->sp_begin();
- print $env->sp_error(), "\n" if $rc == -1;
- 
- $rc = $db->sp_set("key", "value");
- print $env->sp_error(), "\n" if $rc == -1;
- 
- $rc = $db->sp_rollback();
- print $env->sp_error(), "\n" if $rc == -1;
-
-
-=head2 sp_set
-
- $rc = $db->sp_set("key", "value");
- print $env->sp_error(), "\n" if $rc == -1;
-
-
-=head2 sp_get
-
- my $error;
- my $value = $db->sp_get("key", $error);
- 
- if($error == -1) {
- 	print $db->sp_error(), "\n";
- }
- elsif($error == 0) {
- 	print "Key not found", "\n";
- }
- elsif($error == 1) {
- 	print "Key found", "\n";
- 	print "key: ", $value, "\n";
- }
-
-
-=head2 sp_fetch
-
- my $cur = $db->sp_cursor(SPGT, "key");
- 
- while($cur->sp_fetch()) {
- 	print $cur->sp_key(), ": ", $cur->sp_value();
-	print $cur->sp_keysize(), ": ", $cur->sp_valuesize();
- }
- 
- $cur->sp_destroy();
-
-
-=head2 sp_key
-
-See sp_fetch
-
-
-=head2 sp_keysize
-
-See sp_fetch
-
-
-=head2 sp_value
-
-See sp_fetch
-
-
-=head2 sp_valuesize
-
-See sp_fetch
-
+go to the next key and return it; if there's no more keys, return undef
 
 =head1 DESTROY
 
- undef $obj;
-
-Free mem and destroy object.
+like usually in Perl, you just need to remove all references to any object to destroy it
 
 =head1 AUTHOR
 
-Alexander Borisov <lex.borisov@gmail.com>
+Vitaliy Filippov <vitalif@mail.ru>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2014 by Alexander Borisov.
+This software is copyright (c) 2015 by Vitaliy Filippov.
 
 This is free software; you can redistribute it and/or modify it under the same terms as the Perl 5 programming language system itself.
 

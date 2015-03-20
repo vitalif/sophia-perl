@@ -34,7 +34,7 @@ my $sophia_src = -e "$sophia/db" ? "$sophia/db" : $sophia;
 
 
 WriteMakefile(
-    AUTHOR         => 'Alexander Borisov <lex.borisov@gmail.com>',
+    AUTHOR         => 'Vitaliy Filippov <vitalif@mail.ru>',
     ABSTRACT_FROM  => 'Sophia.pm',
     VERSION_FROM   => 'Sophia.pm',
     NAME           => 'Database::Sophia',
