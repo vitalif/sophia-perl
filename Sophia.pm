@@ -5,22 +5,45 @@ use strict;
 use vars qw($AUTOLOAD $VERSION $ABSTRACT @ISA @EXPORT);
 
 BEGIN {
-	$VERSION = 0.8;
+	$VERSION = 1.2;
 	$ABSTRACT = "Sophia is a modern embeddable key-value database designed for a high load environment (XS for Sophia)";
-	
-	@ISA = qw(Exporter DynaLoader);
-	@EXPORT = qw(
-		SPDIR SPALLOC SPCMP SPPAGE SPGC SPGCF
-		SPGROW SPMERGE SPMERGEWM SPMERGEFORCE SPVERSION
-		SPO_RDONLY SPO_RDWR SPO_CREAT SPO_SYNC
-		SPGT SPGTE SPLT SPLTE
-	);
+	@ISA = qw(DynaLoader);
 };
 
 bootstrap Database::Sophia $VERSION;
 
 use DynaLoader ();
 use Exporter ();
+
+package Database::Sophia::Txn;
+
+sub get
+{
+    my ($self, $db, $key) = @_;
+    $db->get($key, $self);
+}
+
+sub delete
+{
+    my ($self, $db, $key) = @_;
+    $db->delete($key, $self);
+}
+
+sub set
+{
+    my ($self, $db, $key, $value) = @_;
+    $db->set($key, $value, $self);
+}
+
+package Database::Sophia::Snapshot;
+
+*get = *Database::Sophia::Txn::get;
+
+sub cursor
+{
+    my ($self, $db, $key, $order) = @_;
+    $db->cursor($key, $order, $self);
+}
 
 1;
 

@@ -257,9 +257,10 @@ open(db)
 		RETVAL
 
 SV*
-get(db, key)
+get(db, key, txn = &PL_sv_undef)
 	Database::Sophia::DB db;
 	SV *key;
+	SV *txn;
 	
 	CODE:
 		int err;
@@ -274,7 +275,7 @@ get(db, key)
 		if (obj)
 		{
 			sp_set(obj, "key", key_c, len_k);
-			ret = sp_get(db->ptr, obj);
+			ret = sp_get(SvOK(txn) ? (INT2PTR(sophia_txn_t*, (SvIV((SV*)SvRV(txn)))))->ptr : db->ptr, obj);
 			if (!err)
 			{
 				value = sp_get(ret, "value", &size);
@@ -287,9 +288,10 @@ get(db, key)
 		RETVAL
 
 SV*
-delete(db, key)
+delete(db, key, txn_or_snapshot = &PL_sv_undef)
 	Database::Sophia::DB db;
 	SV *key;
+	SV *txn_or_snapshot;
 	
 	CODE:
 		int err;
@@ -302,7 +304,7 @@ delete(db, key)
 		if (obj)
 		{
 			sp_set(obj, "key", key_c, len_k);
-			err = sp_delete(db->ptr, obj);
+			err = sp_delete(SvOK(txn_or_snapshot) ? (INT2PTR(sophia_txn_t*, (SvIV((SV*)SvRV(txn_or_snapshot)))))->ptr : db->ptr, obj);
 			sp_destroy(obj);
 		}
 		RETVAL = newSViv(err);
@@ -310,10 +312,11 @@ delete(db, key)
 		RETVAL
 
 SV*
-set(db, key, value)
+set(db, key, value, txn_or_snapshot = &PL_sv_undef)
 	Database::Sophia::DB db;
 	SV *key;
 	SV *value;
+	SV *txn_or_snapshot;
 	
 	CODE:
 		int err;
@@ -329,7 +332,7 @@ set(db, key, value)
 		{
 			sp_set(obj, "key", key_c, len_k);
 			sp_set(obj, "value", value_c, len_v);
-			err = sp_set(db->ptr, obj);
+			err = sp_set(SvOK(txn_or_snapshot) ? (INT2PTR(sophia_txn_t*, (SvIV((SV*)SvRV(txn_or_snapshot)))))->ptr : db->ptr, obj);
 			sp_destroy(obj);
 		}
 		RETVAL = newSViv(err);
@@ -337,10 +340,11 @@ set(db, key, value)
 		RETVAL
 
 Database::Sophia::Cursor
-cursor(db, key, order)
+cursor(db, key, order, snapshot = &PL_sv_undef)
 	Database::Sophia::DB db;
 	SV *key;
 	SV *order;
+	SV *snapshot;
 	
 	CODE:
 		void *c;
@@ -355,7 +359,7 @@ cursor(db, key, order)
 		{
 			sp_set(obj, "key", key_c, len_k);
 			sp_set(obj, "order", order_c, len_o);
-			c = sp_cursor(db->ptr, obj);
+			c = sp_cursor(SvOK(snapshot) ? (INT2PTR(sophia_snapshot_t*, (SvIV((SV*)SvRV(snapshot)))))->ptr : db->ptr, obj);
 			sp_destroy(obj);
 			if (c)
 			{
@@ -392,89 +396,6 @@ commit(txn)
 	OUTPUT:
 		RETVAL
 
-SV*
-get(txn, db, key)
-	Database::Sophia::Txn txn;
-	Database::Sophia::DB db;
-	SV *key;
-	
-	CODE:
-		int err;
-		STRLEN len_k = 0;
-		char *key_c = SvPV(key, len_k);
-		void *value;
-		size_t size;
-		
-		RETVAL = &PL_sv_undef;
-		void *obj = sp_object(db->ptr);
-		void *ret;
-		if (obj)
-		{
-			sp_set(obj, "key", key_c, len_k);
-			ret = sp_get(txn->ptr, obj);
-			if (!err)
-			{
-				value = sp_get(ret, "value", &size);
-				RETVAL = newSVpv(value, size);
-				sp_destroy(ret);
-			}
-			sp_destroy(obj);
-		}
-	OUTPUT:
-		RETVAL
-
-SV*
-delete(txn, db, key)
-	Database::Sophia::Txn txn;
-	Database::Sophia::DB db;
-	SV *key;
-	
-	CODE:
-		int err;
-		STRLEN len_k = 0;
-		char *key_c = SvPV(key, len_k);
-		
-		RETVAL = &PL_sv_undef;
-		void *obj = sp_object(db->ptr);
-		void *ret;
-		if (obj)
-		{
-			sp_set(obj, "key", key_c, len_k);
-			err = sp_delete(txn->ptr, obj);
-			sp_destroy(obj);
-		}
-		RETVAL = newSViv(err);
-	OUTPUT:
-		RETVAL
-
-SV*
-set(txn, db, key, value)
-	Database::Sophia::Txn txn;
-	Database::Sophia::DB db;
-	SV *key;
-	SV *value;
-	
-	CODE:
-		int err;
-		STRLEN len_k = 0;
-		char *key_c = SvPV(key, len_k);
-		STRLEN len_v = 0;
-		char *value_c = SvPV(value, len_v);
-		
-		RETVAL = &PL_sv_undef;
-		void *obj = sp_object(db->ptr);
-		void *ret;
-		if (obj)
-		{
-			sp_set(obj, "key", key_c, len_k);
-			sp_set(obj, "value", value_c, len_v);
-			err = sp_set(txn->ptr, obj);
-			sp_destroy(obj);
-		}
-		RETVAL = newSViv(err);
-	OUTPUT:
-		RETVAL
-
 void
 DESTROY(ptr)
 	Database::Sophia::Txn ptr;
@@ -497,69 +418,6 @@ drop(snapshot)
 	CODE:
 		RETVAL = newSViv( sp_drop(snapshot->ptr) );
 		// FIXME destroy
-	OUTPUT:
-		RETVAL
-
-SV*
-get(snapshot, db, key)
-	Database::Sophia::Snapshot snapshot;
-	Database::Sophia::DB db;
-	SV *key;
-	
-	CODE:
-		int err;
-		STRLEN len_k = 0;
-		char *key_c = SvPV(key, len_k);
-		void *value;
-		size_t size;
-		
-		RETVAL = &PL_sv_undef;
-		void *obj = sp_object(db->ptr);
-		void *ret;
-		if (obj)
-		{
-			sp_set(obj, "key", key_c, len_k);
-			ret = sp_get(snapshot->ptr, obj);
-			if (!err)
-			{
-				value = sp_get(ret, "value", &size);
-				RETVAL = newSVpv(value, size);
-				sp_destroy(ret);
-			}
-			sp_destroy(obj);
-		}
-	OUTPUT:
-		RETVAL
-
-Database::Sophia::Cursor
-cursor(snapshot, db, key, order)
-	Database::Sophia::Snapshot snapshot;
-	Database::Sophia::DB db;
-	SV *key;
-	SV *order;
-	
-	CODE:
-		void *c;
-		STRLEN len_k = 0;
-		char *key_c = SvPV(key, len_k);
-		STRLEN len_o = 0;
-		char *order_c = SvPV(order, len_o);
-		void *obj = sp_object(db->ptr);
-		
-		RETVAL = (void*)&PL_sv_undef;
-		if (obj)
-		{
-			sp_set(obj, "key", key_c, len_k);
-			sp_set(obj, "order", order_c, len_o);
-			c = sp_cursor(snapshot->ptr, obj);
-			sp_destroy(obj);
-			if (c)
-			{
-				sophia_cursor_t *cur = malloc(sizeof(sophia_cursor_t));
-				cur->ptr = c;
-				RETVAL = cur;
-			}
-		}
 	OUTPUT:
 		RETVAL
 
