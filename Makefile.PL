@@ -28,7 +28,7 @@ if($rc && !-e "sophia-master")
 }
 
 my $sophia     = $FindBin::Bin ."/sophia-master";
-my $sophia_src = -e "$sophia/db" ? "$sophia/db" : $sophia;
+my $sophia_src = $sophia;
 
 `make -C $sophia_src libsophia.a`;
 
