@@ -1,0 +1,13 @@
+TYPEMAP
+sophia_env_t * T_PTROBJ
+Database::Sophia T_PTROBJ
+sophia_ctl_t * T_PTROBJ
+Database::Sophia::Ctl T_PTROBJ
+sophia_txn_t * T_PTROBJ
+Database::Sophia::Txn T_PTROBJ
+sophia_db_t * T_PTROBJ
+Database::Sophia::DB T_PTROBJ
+sophia_snapshot_t * T_PTROBJ
+Database::Sophia::Snapshot T_PTROBJ
+sophia_cursor_t * T_PTROBJ
+Database::Sophia::Cursor T_PTROBJ
