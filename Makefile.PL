@@ -40,8 +40,7 @@ WriteMakefile(
     NAME           => 'Database::Sophia',
     LICENSE        => 'perl',
     LINKTYPE       => 'dynamic',
+    CCFLAGS        => '-Wall',
     LIBS           => ["-L$sophia_src -lsophia -lpthread"],
     INC            => '-I'. $sophia_src
 );
-
-

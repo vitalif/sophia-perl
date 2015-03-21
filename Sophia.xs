@@ -257,13 +257,12 @@ open(db)
 		RETVAL
 
 SV*
-get(db, key, txn = &PL_sv_undef)
+get(db, key, txn_or_snapshot = &PL_sv_undef)
 	Database::Sophia::DB db;
 	SV *key;
-	SV *txn;
+	SV *txn_or_snapshot;
 	
 	CODE:
-		int err;
 		STRLEN len_k = 0;
 		char *key_c = SvPV(key, len_k);
 		void *value;
@@ -275,8 +274,8 @@ get(db, key, txn = &PL_sv_undef)
 		if (obj)
 		{
 			sp_set(obj, "key", key_c, len_k);
-			ret = sp_get(SvOK(txn) ? (INT2PTR(sophia_txn_t*, (SvIV((SV*)SvRV(txn)))))->ptr : db->ptr, obj);
-			if (!err)
+			ret = sp_get(SvOK(txn_or_snapshot) ? (INT2PTR(sophia_txn_t*, (SvIV((SV*)SvRV(txn_or_snapshot)))))->ptr : db->ptr, obj);
+			if (ret)
 			{
 				value = sp_get(ret, "value", &size);
 				RETVAL = newSVpv(value, size);
@@ -288,23 +287,22 @@ get(db, key, txn = &PL_sv_undef)
 		RETVAL
 
 SV*
-delete(db, key, txn_or_snapshot = &PL_sv_undef)
+delete(db, key, txn = &PL_sv_undef)
 	Database::Sophia::DB db;
 	SV *key;
-	SV *txn_or_snapshot;
+	SV *txn;
 	
 	CODE:
-		int err;
+		int err = -1;
 		STRLEN len_k = 0;
 		char *key_c = SvPV(key, len_k);
 		
 		RETVAL = &PL_sv_undef;
 		void *obj = sp_object(db->ptr);
-		void *ret;
 		if (obj)
 		{
 			sp_set(obj, "key", key_c, len_k);
-			err = sp_delete(SvOK(txn_or_snapshot) ? (INT2PTR(sophia_txn_t*, (SvIV((SV*)SvRV(txn_or_snapshot)))))->ptr : db->ptr, obj);
+			err = sp_delete(SvOK(txn) ? (INT2PTR(sophia_txn_t*, (SvIV((SV*)SvRV(txn)))))->ptr : db->ptr, obj);
 			sp_destroy(obj);
 		}
 		RETVAL = newSViv(err);
@@ -312,14 +310,14 @@ delete(db, key, txn_or_snapshot = &PL_sv_undef)
 		RETVAL
 
 SV*
-set(db, key, value, txn_or_snapshot = &PL_sv_undef)
+set(db, key, value, txn = &PL_sv_undef)
 	Database::Sophia::DB db;
 	SV *key;
 	SV *value;
-	SV *txn_or_snapshot;
+	SV *txn;
 	
 	CODE:
-		int err;
+		int err = -1;
 		STRLEN len_k = 0;
 		char *key_c = SvPV(key, len_k);
 		STRLEN len_v = 0;
@@ -327,12 +325,11 @@ set(db, key, value, txn_or_snapshot = &PL_sv_undef)
 		
 		RETVAL = &PL_sv_undef;
 		void *obj = sp_object(db->ptr);
-		void *ret;
 		if (obj)
 		{
 			sp_set(obj, "key", key_c, len_k);
 			sp_set(obj, "value", value_c, len_v);
-			err = sp_set(SvOK(txn_or_snapshot) ? (INT2PTR(sophia_txn_t*, (SvIV((SV*)SvRV(txn_or_snapshot)))))->ptr : db->ptr, obj);
+			err = sp_set(SvOK(txn) ? (INT2PTR(sophia_txn_t*, (SvIV((SV*)SvRV(txn)))))->ptr : db->ptr, obj);
 			sp_destroy(obj);
 		}
 		RETVAL = newSViv(err);
