@@ -32,7 +32,7 @@ my $sophia_src = $sophia;
 
 `make -C $sophia_src libsophia.a`;
 
-
+my $ccflags = $Config::Config{ccflags} || '';
 WriteMakefile(
     AUTHOR         => 'Vitaliy Filippov <vitalif@mail.ru>',
     ABSTRACT_FROM  => 'Sophia.pm',
@@ -40,7 +40,7 @@ WriteMakefile(
     NAME           => 'Database::Sophia',
     LICENSE        => 'perl',
     LINKTYPE       => 'dynamic',
-    CCFLAGS        => '-Wall',
+    CCFLAGS        => "-Wall $ccflags",
     LIBS           => ["-L$sophia_src -lsophia -lpthread"],
     INC            => '-I'. $sophia_src
 );
